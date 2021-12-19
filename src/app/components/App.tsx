@@ -24,6 +24,23 @@ export function App() {
 	)
 }
 
+function List(props: { children: React.ReactNode; horizontal?: boolean }) {
+	return (
+		<div
+			style={{
+				display: "flex",
+				flexDirection: props.horizontal ? "row" : "column",
+			}}
+		>
+			{props.children}
+		</div>
+	)
+}
+
+function Item(props: { value: number; onMouseDown: MouseEventHandler }) {
+	return <div onMouseDown={props.onMouseDown}>{props.value}</div>
+}
+
 function DraggableList<T>(props: {
 	items: T[]
 	onReorder(removeIndex: number, insertIndex: number): void
@@ -189,23 +206,6 @@ function DraggableList<T>(props: {
 			))}
 		</Container>
 	)
-}
-
-function List(props: { children: React.ReactNode; horizontal?: boolean }) {
-	return (
-		<div
-			style={{
-				display: "flex",
-				flexDirection: props.horizontal ? "row" : "column",
-			}}
-		>
-			{props.children}
-		</div>
-	)
-}
-
-function Item(props: { value: number; onMouseDown: MouseEventHandler }) {
-	return <div onMouseDown={props.onMouseDown}>{props.value}</div>
 }
 
 type Point = { x: number; y: number }
