@@ -1,6 +1,6 @@
 {
 	"name": "draggable-list",
-	"version": "1.0.6",
+	"version": "1.0.7",
 	"description": "boilerplate for web applications using typescript and webpack",
 	"main": "index.js",
 	"scripts": {
