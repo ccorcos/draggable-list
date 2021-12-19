@@ -140,10 +140,6 @@ function DraggableList<T>(props: {
 
 		const handleMouseUp = () => {
 			// Clear all transforms.
-			// for (let i = 0; i < nodes.length; i++) {
-			// 	const node = nodes[i]
-			// 	node.style.transform = ""
-			// }
 
 			// Set all to their final positions.
 			for (let i = 0; i < nodes.length; i++) {
@@ -182,6 +178,8 @@ function DraggableList<T>(props: {
 			}
 
 			const handleTransitionEnd = () => {
+				// Clear the transition and transform so that on the next render,
+				// everything will be in the right place.
 				for (const node of nodes) {
 					node.style.transition = ""
 					node.style.transform = ""
