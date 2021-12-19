@@ -1,13 +1,9 @@
-import React from "react"
-import { deletePlayer } from "../actions/deletePlayer"
-import { resetGame } from "../actions/resetGame"
-import { Player, useAppState } from "../AppState"
-import { useEnvironment } from "../Environment"
+import React, { MouseEventHandler, useCallback, useState } from "react"
+import { useRefCurrent } from "../hooks/useRefCurrent"
 
 export function App() {
-	const environment = useEnvironment()
-	const { app } = environment
-	const players = useAppState((game) => game.players)
+	const [list, setList] = useState([0, 1, 2, 3, 4])
+
 	return (
 		<div
 			style={{
@@ -16,99 +12,214 @@ export function App() {
 				margin: "0 auto",
 			}}
 		>
-			<h2>Score Counter2</h2>
-			{players.map((player, index) => (
-				<Player player={player} index={index} key={index} />
-			))}
-			<div style={{ display: "flex", gap: 8 }}>
-				<button onClick={() => app.dispatch.addPlayer()}>Add Player</button>
-				<button onClick={() => resetGame(environment)}>Reset Game</button>
-			</div>
+			<DraggableList
+				items={list}
+				onReorder={(removeIndex, insertIndex) => {
+					setList(reorder(list, removeIndex, insertIndex))
+				}}
+				Container={List}
+				Item={Item}
+			/>
 		</div>
 	)
 }
 
-function Player(props: { player: Player; index: number }) {
-	const { player, index } = props
-	const environment = useEnvironment()
-	const { app } = environment
+function DraggableList<T>(props: {
+	items: T[]
+	onReorder(removeIndex: number, insertIndex: number): void
+	Container(props: { children: React.ReactNode }): React.ReactElement
+	Item(props: { value: T; onMouseDown: MouseEventHandler }): React.ReactElement
+}) {
+	const { items, onReorder, Container, Item } = props
+
+	const onReorderRef = useRefCurrent(onReorder)
+
+	const handleMouseDown = useCallback((event: React.MouseEvent) => {
+		// Only respond to left-clicks
+		if (event.button !== 0) {
+			return
+		}
+		event.stopPropagation()
+		event.preventDefault()
+
+		const mouseStart = {
+			x: event.pageX,
+			y: event.pageY,
+		}
+
+		const target = event.target as HTMLElement
+		const parent = target.parentNode as HTMLElement
+		const nodes = Array.from(parent.children) as HTMLElement[]
+		const startIndex = nodes.indexOf(target)
+
+		// Measure the positions of all the items.
+		const positions = nodes.map((node) => {
+			const { top, left, height, width } = node.getBoundingClientRect()
+			return { x: left, y: top, height, width }
+		})
+
+		const startPosition = positions[startIndex]
+		let currentIndex = startIndex
+
+		for (const node of nodes) {
+			node.style.transition = "transform ease-in-out 50ms"
+		}
+
+		const handleMouseMove = (event: MouseEvent) => {
+			const mouseCurrent = {
+				x: event.pageX,
+				y: event.pageY,
+			}
+
+			const mouseDelta = {
+				x: mouseCurrent.x - mouseStart.x,
+				y: mouseCurrent.y - mouseStart.y,
+			}
+
+			const currentPosition = {
+				x: startPosition.x + mouseDelta.x,
+				y: startPosition.y + mouseDelta.y,
+			}
+
+			const distances = positions.map((position) =>
+				distance(currentPosition, position)
+			)
+			currentIndex = distances.indexOf(Math.min(...distances))
+
+			// Given the list:
+			// 1
+			// 2
+			// 3
+			// 4
+			// 5
+			// If 3 is closer to 1, then 1 and 2 move down.
+			// If 3 is closer to 5, then 4 and 5 move up.
+
+			for (let i = 0; i < nodes.length; i++) {
+				const node = nodes[i]
+
+				// If this is the node we're currently dragging...
+				if (i === startIndex) {
+					node.style.transform = `translate(${mouseDelta.x}px, ${mouseDelta.y}px)`
+					continue
+				}
+
+				// Get the range of nodes that we need to shift.
+				const start = Math.min(startIndex, currentIndex)
+				const end = Math.max(startIndex, currentIndex)
+
+				if (i >= start && i <= end) {
+					const direction = currentIndex < startIndex ? 1 : -1
+					node.style.transform = `translate(0, ${
+						direction * startPosition.height
+					}px)`
+					continue
+				}
+
+				// Clear the transform for the other nodes.
+				node.style.transform = ""
+			}
+		}
+
+		const handleMouseUp = () => {
+			// Clear all transforms.
+			// for (let i = 0; i < nodes.length; i++) {
+			// 	const node = nodes[i]
+			// 	node.style.transform = ""
+			// }
+
+			// Set all to their final positions.
+			for (let i = 0; i < nodes.length; i++) {
+				const node = nodes[i]
+
+				// If this is the node we're currently dragging...
+				if (i === startIndex) {
+					if (startIndex === currentIndex) {
+						node.style.transform = ""
+						continue
+					}
+
+					const desiredPosition = positions[currentIndex]
+					const { x, y } = {
+						x: desiredPosition.x - startPosition.x,
+						y: desiredPosition.y - startPosition.y,
+					}
+					node.style.transform = `translate(${x}px, ${y}px)`
+					continue
+				}
+
+				// Get the range of nodes that we need to shift.
+				const start = Math.min(startIndex, currentIndex)
+				const end = Math.max(startIndex, currentIndex)
+
+				if (i >= start && i <= end) {
+					const direction = currentIndex < startIndex ? 1 : -1
+					node.style.transform = `translate(0, ${
+						direction * startPosition.height
+					}px)`
+					continue
+				}
+
+				// Clear the transform for the other nodes.
+				node.style.transform = ""
+			}
+
+			const handleTransitionEnd = () => {
+				for (const node of nodes) {
+					node.style.transition = ""
+					node.style.transform = ""
+				}
+				onReorderRef.current(startIndex, currentIndex)
+				target.removeEventListener("transitionend", handleTransitionEnd)
+			}
+			target.addEventListener("transitionend", handleTransitionEnd)
+
+			window.removeEventListener("mousemove", handleMouseMove)
+			window.removeEventListener("mouseup", handleMouseUp)
+		}
+
+		window.addEventListener("mousemove", handleMouseMove)
+		window.addEventListener("mouseup", handleMouseUp)
+	}, [])
 
 	return (
-		<div style={{ display: "flex", paddingBottom: 8 }}>
-			<div
-				style={{
-					marginRight: 8,
-					position: "relative",
-					flex: 1,
-					display: "flex",
-				}}
-			>
-				<input
-					style={{
-						flex: 1,
-						paddingTop: 6,
-						paddingBottom: 6,
-						textAlign: "left",
-						paddingRight: "3em",
-						width: "1em",
-					}}
-					placeholder={`Player ${index + 1}`}
-					value={player.name}
-					onChange={(event) =>
-						app.dispatch.editName(index, event.target!.value)
-					}
-				/>
-				<div
-					style={{
-						position: "absolute",
-						right: 0,
-						height: "100%",
-						display: "flex",
-						alignItems: "center",
-						justifyContent: "center",
-					}}
-				>
-					<button
-						style={{
-							fontSize: 12,
-							border: "none",
-							background: "transparent",
-							color: "red",
-						}}
-						onClick={() => deletePlayer(environment, index)}
-					>
-						Delete
-					</button>
-				</div>
-			</div>
-			<div style={{ display: "flex" }}>
-				<div>
-					<button
-						style={{ flex: 1, padding: "6px 16px" }}
-						onClick={() => app.dispatch.incrementScore(index, -1)}
-					>
-						-1
-					</button>
-				</div>
-				<div
-					style={{
-						padding: "1px 0px",
-						minWidth: "2em",
-						textAlign: "center",
-						lineHeight: "36px",
-					}}
-				>
-					{player.score}
-				</div>
-				<div>
-					<button
-						style={{ flex: 1, padding: "6px 16px" }}
-						onClick={() => app.dispatch.incrementScore(index, +1)}
-					>
-						+1
-					</button>
-				</div>
-			</div>
+		<Container>
+			{items.map((value, index) => (
+				<Item key={index} value={value} onMouseDown={handleMouseDown} />
+			))}
+		</Container>
+	)
+}
+
+function List(props: { children: React.ReactNode; horizontal?: boolean }) {
+	return (
+		<div
+			style={{
+				display: "flex",
+				flexDirection: props.horizontal ? "row" : "column",
+			}}
+		>
+			{props.children}
 		</div>
 	)
 }
+
+function Item(props: { value: number; onMouseDown: MouseEventHandler }) {
+	return <div onMouseDown={props.onMouseDown}>{props.value}</div>
+}
+
+type Point = { x: number; y: number }
+
+function distance(a: Point, b: Point) {
+	return Math.sqrt(Math.pow(a.x - b.x, 2) + Math.pow(a.y - b.y, 2))
+}
+
+function reorder<T>(list: T[], startIndex: number, endIndex: number): T[] {
+	const newList = [...list]
+	const [item] = newList.splice(startIndex, 1)
+	newList.splice(endIndex, 0, item)
+	return newList
+}
+
+// console.log(reorder([0, 1, 2, 3, 4], 2, 0))
+// console.log(reorder([0, 1, 2, 3, 4], 2, 4))
